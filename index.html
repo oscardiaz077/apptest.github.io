@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Examen Tipo Test Profesional</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            background-color: #f0f2f5;
+            color: #333;
+        }
+        .container {
+            max-width: 800px;
+            margin: auto;
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1, h2 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .config-panel {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        #fileInput, #topicSelect, #numQuestions, #modeSelect, button {
+            margin: 10px 0;
+        }
+        select, input[type="number"], button {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        #clearDataButton {
+            background-color: #e74c3c;
+        }
+        #clearDataButton:hover {
+            background-color: #c0392b;
+        }
+        #quizContainer, #statsContainer {
+            display: none;
+        }
+        .question {
+            background-color: #f9f9f9;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .options label {
+            display: block;
+            padding: 10px;
+            margin: 5px 0;
+            background-color: #ecf0f1;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .options label:hover {
+            background-color: #d5dbdb;
+        }
+        .correct {
+            background-color: #2ecc71 !important;
+            color: white;
+        }
+        .incorrect {
+            background-color: #e74c3c !important;
+            color: white;
+        }
+        .explanation {
+            margin-top: 10px;
+            padding: 10px;
+            background-color: #e8f6f3;
+            border-radius: 4px;
+            display: none;
+        }
+        #results {
+            text-align: center;
+            font-size: 18px;
+            margin-top: 20px;
+            font-weight: bold;
+        }
+        #statsContainer {
+            margin-top: 30px;
+        }
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            padding: 10px;
+            background-color: #f9f9f9;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Examen Tipo Test Profesional</h1>
+        <div class="config-panel">
+            <input type="file" id="fileInput" accept=".csv">
+            <select id="topicSelect">
+                <option value="all">Todos los temas</option>
+            </select>
+            <input type="number" id="numQuestions" min="1" value="10" placeholder="Número de preguntas">
+            <select id="modeSelect">
+                <option value="exam">Modo Examen</option>
+                <option value="study">Modo Estudio</option>
+            </select>
+        </div>
+        <button id="startButton">Comenzar examen</button>
+        <button id="clearDataButton">Borrar datos guardados</button>
+        <button id="showStatsButton">Mostrar Estadísticas</button>
+        <div id="quizContainer"></div>
+        <div id="results"></div>
+        <div id="statsContainer"></div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+    <script>
+        let questions = [];
+        let currentQuiz = [];
+        let failedQuestions = [];
+        let statistics = {};
+        let currentMode = 'exam';
+
+        window.addEventListener('load', loadData);
+
+        document.getElementById('fileInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            Papa.parse(file, {
+                complete: function(results) {
+                    questions = results.data.slice(1);
+                    saveData();
+                    updateTopicSelect();
+                }
+            });
+        });
+
+        function loadData() {
+            const storedQuestions = localStorage.getItem('quizQuestions');
+            const storedFailedQuestions = localStorage.getItem('failedQuestions');
+            const storedStatistics = localStorage.getItem('statistics');
+            if (storedQuestions) questions = JSON.parse(storedQuestions);
+            if (storedFailedQuestions) failedQuestions = JSON.parse(storedFailedQuestions);
+            if (storedStatistics) statistics = JSON.parse(storedStatistics);
+            updateTopicSelect();
+        }
+
+        function saveData() {
+            localStorage.setItem('quizQuestions', JSON.stringify(questions));
+            localStorage.setItem('failedQuestions', JSON.stringify(failedQuestions));
+            localStorage.setItem('statistics', JSON.stringify(statistics));
+        }
+
+        function updateTopicSelect() {
+            const topicSelect = document.getElementById('topicSelect');
+            topicSelect.innerHTML = '<option value="all">Todos los temas</option>';
+            const topics = [...new Set(questions.map(q => q[0]))];
+            topics.forEach(topic => {
+                const option = document.createElement('option');
+                option.value = topic;
+                option.textContent = topic;
+                topicSelect.appendChild(option);
+            });
+            if (failedQuestions.length > 0) {
+                const option = document.createElement('option');
+                option.value = 'failed';
+                option.textContent = 'Preguntas falladas';
+                topicSelect.appendChild(option);
+            }
+        }
+
+        document.getElementById('startButton').addEventListener('click', startQuiz);
+        document.getElementById('clearDataButton').addEventListener('click', clearStoredData);
+        document.getElementById('showStatsButton').addEventListener('click', showStatistics);
+        document.getElementById('modeSelect').addEventListener('change', function(e) {
+            currentMode = e.target.value;
+        });
+
+        function startQuiz() {
+            const topic = document.getElementById('topicSelect').value;
+            const numQuestions = parseInt(document.getElementById('numQuestions').value);
+            let filteredQuestions;
+            
+            if (topic === 'failed') {
+                filteredQuestions = failedQuestions;
+            } else if (topic === 'all') {
+                filteredQuestions = questions;
+            } else {
+                filteredQuestions = questions.filter(q => q[0] === topic);
+            }
+            
+            if (filteredQuestions.length < numQuestions) {
+                alert(`Solo hay ${filteredQuestions.length} preguntas disponibles para este tema. Se usarán todas las preguntas disponibles.`);
+                currentQuiz = filteredQuestions;
+            } else {
+                currentQuiz = getRandomQuestions(filteredQuestions, numQuestions);
+            }
+            
+            displayQuiz();
+        }
+
+        function getRandomQuestions(questions, n) {
+            const shuffled = [...questions].sort(() => 0.5 - Math.random());
+            return shuffled.slice(0, n);
+        }
+
+        function displayQuiz() {
+            const quizContainer = document.getElementById('quizContainer');
+            quizContainer.innerHTML = '';
+            quizContainer.style.display = 'block';
+
+            currentQuiz.forEach((question, index) => {
+                const questionDiv = document.createElement('div');
+                questionDiv.className = 'question';
+                questionDiv.innerHTML = `
+                    <p><strong>Pregunta ${index + 1}:</strong> ${question[1]}</p>
+                    <div class="options">
+                        ${['A', 'B', 'C', 'D'].map((letter, i) => `
+                            <label>
+                                <input type="radio" name="q${index}" value="${letter}">
+                                ${letter}: ${question[i + 2]}
+                            </label>
+                        `).join('')}
+                    </div>
+                    <div class="explanation">${question[7] || 'No hay explicación disponible.'}</div>
+                `;
+                quizContainer.appendChild(questionDiv);
+
+                if (currentMode === 'study') {
+                    const options = questionDiv.querySelectorAll('input[type="radio"]');
+                    options.forEach(option => {
+                        option.addEventListener('change', () => checkAnswer(question, index));
+                    });
+                }
+            });
+
+            if (currentMode === 'exam') {
+                const submitButton = document.createElement('button');
+                submitButton.id = 'submitButton';
+                submitButton.textContent = 'Enviar respuestas';
+                submitButton.addEventListener('click', checkAnswers);
+                quizContainer.appendChild(submitButton);
+            }
+        }
+
+        function checkAnswer(question, index) {
+            const selectedAnswer = document.querySelector(`input[name="q${index}"]:checked`);
+            const correctAnswer = question[6];
+            const options = document.querySelectorAll(`input[name="q${index}"]`);
+            const explanationDiv = document.querySelectorAll('.explanation')[index];
+            
+            options.forEach(option => {
+                const label = option.parentElement;
+                if (option.value === correctAnswer) {
+                    label.classList.add('correct');
+                } else if (option.checked && option.value !== correctAnswer) {
+                    label.classList.add('incorrect');
+                }
+                option.disabled = true;
+            });
+
+            explanationDiv.style.display = 'block';
+
+            updateStatistics(question[0], selectedAnswer.value === correctAnswer);
+        }
+
+        function checkAnswers() {
+            let score = 0;
+            currentQuiz.forEach((question, index) => {
+                const selectedAnswer = document.querySelector(`input[name="q${index}"]:checked`);
+                const correctAnswer = question[6];
+                const options = document.querySelectorAll(`input[name="q${index}"]`);
+                const explanationDiv = document.querySelectorAll('.explanation')[index];
+                
+                options.forEach(option => {
+                    const label = option.parentElement;
+                    if (option.value === correctAnswer) {
+                        label.classList.add('correct');
+                    } else if (option.checked && option.value !== correctAnswer) {
+                        label.classList.add('incorrect');
+                    }
+                    option.disabled = true;
+                });
+
+                explanationDiv.style.display = 'block';
+
+                if (selectedAnswer && selectedAnswer.value === correctAnswer) {
+                    score++;
+                    failedQuestions = failedQuestions.filter(q => q[1] !== question[1]);
+                } else if (selectedAnswer) {
+                    if (!failedQuestions.some(q => q[1] === question[1])) {
+                        failedQuestions.push(question);
+                    }
+                }
+
+                updateStatistics(question[0], selectedAnswer && selectedAnswer.value === correctAnswer);
+            });
+
+            saveData();
+            updateTopicSelect();
+
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.textContent = `Has acertado ${score} de ${currentQuiz.length} preguntas.`;
+            
+            document.getElementById('submitButton').style.display = 'none';
+        }
+
+        function updateStatistics(topic, isCorrect) {
+            if (!statistics[topic]) {
+                statistics[topic] = { correct: 0, total: 0 };
+            }
+            statistics[topic].total++;
+            if (isCorrect) {
+                statistics[topic].correct++;
+            }
+            saveData();
+        }
+
+        function showStatistics() {
+            const statsContainer = document.getElementById('statsContainer');
+            statsContainer.innerHTML = '<h2>Estadísticas de Rendimiento</h2>';
+            statsContainer.style.display = 'block';
+
+            for (const topic in statistics) {
+                const percentage = ((statistics[topic].correct / statistics[topic].total) * 100).toFixed(2);
+                const statItem = document.createElement('div');
+                statItem.className = 'stat-item';
+                statItem.innerHTML = `
+                    <span>${topic}</span>
+                    <span>${statistics[topic].correct}/${statistics[topic].total} (${percentage}%)</span>
+                `;
+                statsContainer.appendChild(statItem);
+            }
+        }
+
+        function clearStoredData() {
+            localStorage.removeItem('quizQuestions');
+            localStorage.removeItem('failedQuestions');
+            localStorage.removeItem('statistics');
+            questions = [];
+            failedQuestions = [];
+            statistics = {};
+            updateTopicSelect();
+            alert('Los datos guardados han sido borrados.');
+        }
+    </script>
+</body>
+</html>
